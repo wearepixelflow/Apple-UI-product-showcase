@@ -1,0 +1,833 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Product Showcase — Feature Explorer</title>
+
+  <!-- GSAP CDN -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.5/gsap.min.js"></script>
+
+  <style>
+    /* ─── Reset & Base ─────────────────────────────────────────────── */
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      /* Palette */
+      --bg:            #000000;
+      --surface-pill:  #1c1c1e;
+      --surface-card:  rgba(38, 38, 40, 0.85);
+      --border-pill:   rgba(255,255,255,0.09);
+      --border-card:   rgba(255,255,255,0.10);
+      --text-primary:  #f5f5f7;
+      --text-muted:    rgba(245,245,247,0.62);
+      --icon-circle:   rgba(255,255,255,0.22);
+      --icon-hover:    rgba(255,255,255,0.35);
+      --arrow-bg:      rgba(255,255,255,0.08);
+      --arrow-hover:   rgba(255,255,255,0.15);
+      --close-bg:      rgba(255,255,255,0.10);
+      --close-hover:   rgba(255,255,255,0.20);
+
+      /* Spacing */
+      --panel-w:       390px;
+      --gap:           8px;
+
+      /* Type */
+      --font: -apple-system, BlinkMacSystemFont, "SF Pro Display", "Helvetica Neue", sans-serif;
+    }
+
+    html, body {
+      width: 100%; height: 100%;
+      background: var(--bg);
+      font-family: var(--font);
+      -webkit-font-smoothing: antialiased;
+      overflow: hidden; /* modal fills viewport */
+    }
+
+    /* ─── Overlay Shell ─────────────────────────────────────────────── */
+    .overlay {
+      position: fixed;
+      inset: 0;
+      background: #000;
+      display: flex;
+      overflow: hidden;
+    }
+
+    /* Subtle vignette around the whole modal */
+    .overlay::after {
+      content: '';
+      position: absolute;
+      inset: 0;
+      pointer-events: none;
+      background: radial-gradient(ellipse at 50% 50%,
+        transparent 55%,
+        rgba(0,0,0,0.55) 100%
+      );
+      z-index: 10;
+    }
+
+    /* ─── Close Button ──────────────────────────────────────────────── */
+    .btn-close {
+      position: absolute;
+      top: 20px; right: 20px;
+      z-index: 50;
+      width: 32px; height: 32px;
+      border-radius: 50%;
+      background: var(--close-bg);
+      border: none;
+      cursor: pointer;
+      display: flex; align-items: center; justify-content: center;
+      transition: background 0.2s ease;
+    }
+    .btn-close:hover { background: var(--close-hover); }
+    .btn-close svg { width: 14px; height: 14px; opacity: 0.75; }
+
+    /* ─── Left Panel ────────────────────────────────────────────────── */
+    .panel {
+      position: relative;
+      z-index: 20;
+      width: var(--panel-w);
+      flex-shrink: 0;
+      display: flex;
+      align-items: center;
+      padding: 48px 32px 48px 56px;
+    }
+
+    /* Nav arrows — vertically centred, left-edge of panel */
+    .nav-arrows {
+      position: absolute;
+      left: 16px;
+      top: 50%;
+      transform: translateY(-50%);
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+    .nav-arrows button {
+      width: 30px; height: 30px;
+      border-radius: 50%;
+      background: var(--arrow-bg);
+      border: none;
+      cursor: pointer;
+      display: flex; align-items: center; justify-content: center;
+      transition: background 0.2s ease, transform 0.15s ease;
+    }
+    .nav-arrows button:hover { background: var(--arrow-hover); }
+    .nav-arrows button:active { transform: scale(0.92); }
+    .nav-arrows button svg { width: 13px; height: 13px; opacity: 0.72; }
+
+    /* Feature list */
+    .feature-list {
+      list-style: none;
+      width: 100%;
+      display: flex;
+      flex-direction: column;
+      gap: var(--gap);
+    }
+
+    /* ─── Feature Item ──────────────────────────────────────────────── */
+    .feature-item {
+      position: relative;
+      overflow: hidden;    /* for height animation */
+      border-radius: 24px; /* outer radius stays constant */
+      /* Height is managed by JS/GSAP */
+    }
+
+    /* ── Collapsed pill button ────────────────────────────────────── */
+    .feature-pill {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 11px 16px 11px 12px;
+      border-radius: 100px;
+      background: var(--surface-pill);
+      border: 1px solid var(--border-pill);
+      cursor: pointer;
+      white-space: nowrap;
+      width: fit-content;
+      user-select: none;
+      transition: background 0.18s ease;
+
+      /* Pill is shown/hidden via GSAP opacity + height on parent */
+    }
+    .feature-pill:hover { background: #2c2c2e; }
+
+    .pill-icon {
+      width: 24px; height: 24px;
+      border-radius: 50%;
+      border: 1.5px solid var(--icon-circle);
+      display: flex; align-items: center; justify-content: center;
+      flex-shrink: 0;
+      transition: border-color 0.2s ease;
+    }
+    .feature-pill:hover .pill-icon { border-color: var(--icon-hover); }
+
+    /* Plus icon — drawn via CSS */
+    .icon-plus {
+      position: relative;
+      width: 10px; height: 10px;
+    }
+    .icon-plus::before,
+    .icon-plus::after {
+      content: '';
+      position: absolute;
+      background: rgba(255,255,255,0.72);
+      border-radius: 1px;
+    }
+    .icon-plus::before { width: 10px; height: 1.5px; top: 50%; left: 0; transform: translateY(-50%); }
+    .icon-plus::after  { width: 1.5px; height: 10px; left: 50%; top: 0; transform: translateX(-50%); }
+
+    /* Color swatch icon (only for Colors item) */
+    .icon-circle-swatch {
+      width: 14px; height: 14px;
+      border-radius: 50%;
+      background: conic-gradient(
+        #c0c0c0 0deg 90deg,
+        #f5a623 90deg 180deg,
+        #5a5f7a 180deg 360deg
+      );
+      opacity: 0.82;
+    }
+
+    .pill-label {
+      font-size: 15px;
+      font-weight: 500;
+      color: var(--text-primary);
+      letter-spacing: -0.01em;
+    }
+
+    /* ── Expanded description card ──────────────────────────────────── */
+    .feature-card {
+      background: var(--surface-card);
+      border: 1px solid var(--border-card);
+      border-radius: 16px;
+      padding: 20px 22px 22px;
+      backdrop-filter: blur(24px);
+      -webkit-backdrop-filter: blur(24px);
+      /* visibility managed by GSAP */
+    }
+
+    .card-title {
+      font-size: 15px;
+      font-weight: 700;
+      color: var(--text-primary);
+      letter-spacing: -0.01em;
+      display: inline;
+    }
+    .card-body {
+      font-size: 15px;
+      font-weight: 400;
+      color: var(--text-muted);
+      letter-spacing: -0.01em;
+      line-height: 1.5;
+      display: inline;
+    }
+
+    /* Color picker (Colors feature only) */
+    .color-picker {
+      display: flex;
+      gap: 8px;
+      margin-top: 14px;
+      padding-left: 2px;
+    }
+    .color-dot {
+      width: 22px; height: 22px;
+      border-radius: 50%;
+      cursor: pointer;
+      border: 2px solid transparent;
+      transition: transform 0.18s ease, border-color 0.18s ease;
+      position: relative;
+    }
+    .color-dot:hover { transform: scale(1.12); }
+    .color-dot.active { border-color: rgba(255,255,255,0.5); }
+    .color-dot::after {
+      content: '';
+      position: absolute;
+      inset: -3px;
+      border-radius: 50%;
+      border: 1.5px solid transparent;
+      transition: border-color 0.18s ease;
+    }
+    .color-dot.active::after { border-color: rgba(255,255,255,0.28); }
+
+    /* ─── Hero / Right Section ──────────────────────────────────────── */
+    .hero {
+      position: relative;
+      flex: 1;
+      overflow: hidden;
+    }
+
+    /* Each visual layer — only one is visible at a time */
+    .hero-visual {
+      position: absolute;
+      inset: 0;
+      opacity: 0;
+      will-change: opacity, transform;
+      /* Images fill the area — use background-image for real usage */
+      display: flex; align-items: center; justify-content: center;
+    }
+    .hero-visual.active { opacity: 1; }
+
+    /* Placeholder gradient visuals for each feature */
+    .hero-visual img {
+      width: 100%; height: 100%;
+      object-fit: cover;
+      object-position: center;
+      display: block;
+    }
+
+    /* ── Placeholder art (shown when no real image is supplied) ─── */
+    .hero-placeholder {
+      width: 100%; height: 100%;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 13px;
+      font-weight: 500;
+      color: rgba(255,255,255,0.12);
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      /* Each feature gets a unique gradient */
+    }
+
+    /* Feature-specific gradient backgrounds (placeholder until user adds images) */
+    .hero-visual[data-feature="colors"]         .hero-placeholder { background: radial-gradient(ellipse 70% 80% at 65% 50%, #7a3b10 0%, #3d1a06 40%, #0a0a0a 100%); }
+    .hero-visual[data-feature="aluminum"]       .hero-placeholder { background: radial-gradient(ellipse 80% 90% at 60% 55%, #2c2c30 0%, #151518 50%, #060606 100%); }
+    .hero-visual[data-feature="vapor-chamber"]  .hero-placeholder { background: radial-gradient(ellipse 70% 80% at 55% 48%, #0d2a4a 0%, #06121e 50%, #020408 100%); }
+    .hero-visual[data-feature="ceramic-shield"] .hero-placeholder { background: radial-gradient(ellipse 75% 85% at 62% 52%, #1a1a2e 0%, #0d0d1a 50%, #040408 100%); }
+    .hero-visual[data-feature="display"]        .hero-placeholder { background: radial-gradient(ellipse 80% 90% at 50% 50%, #2a1a0a 0%, #150e05 50%, #060402 100%); }
+    .hero-visual[data-feature="camera"]         .hero-placeholder { background: radial-gradient(ellipse 75% 85% at 58% 50%, #0a0a1f 0%, #05050f 50%, #020208 100%); }
+    .hero-visual[data-feature="action"]         .hero-placeholder { background: radial-gradient(ellipse 80% 90% at 55% 52%, #1a0a0a 0%, #0d0505 50%, #060202 100%); }
+
+    /* ── Spotlight sweep overlay ──────────────────────────────────── */
+    .spotlight {
+      position: absolute;
+      inset: 0;
+      pointer-events: none;
+      z-index: 5;
+      background: linear-gradient(
+        115deg,
+        transparent 0%,
+        transparent 35%,
+        rgba(255,255,255,0.028) 50%,
+        transparent 65%,
+        transparent 100%
+      );
+      /* animated via GSAP */
+    }
+
+    /* ─── Utility: visually hidden ──────────────────────────────────── */
+    .sr-only {
+      position: absolute; width: 1px; height: 1px;
+      padding: 0; margin: -1px; overflow: hidden;
+      clip: rect(0,0,0,0); white-space: nowrap; border: 0;
+    }
+
+    /* ─── Entry animation: whole overlay fades in ──────────────────── */
+    .overlay { opacity: 0; }
+  </style>
+</head>
+<body>
+
+<!-- ════════════════════════════════════════════════════════════════
+     OVERLAY
+════════════════════════════════════════════════════════════════ -->
+<div class="overlay" id="overlay" role="dialog" aria-modal="true" aria-label="iPhone 17 Pro features">
+
+  <!-- Close -->
+  <button class="btn-close" id="btnClose" aria-label="Close">
+    <svg viewBox="0 0 14 14" fill="none" xmlns="http://www.w3.org/2000/svg">
+      <path d="M1 1L13 13M13 1L1 13" stroke="white" stroke-width="1.8" stroke-linecap="round"/>
+    </svg>
+  </button>
+
+  <!-- ── Left Panel ──────────────────────────────────────────────── -->
+  <aside class="panel">
+
+    <!-- Prev / Next nav -->
+    <div class="nav-arrows" id="navArrows">
+      <button id="btnPrev" aria-label="Previous feature">
+        <svg viewBox="0 0 13 13" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <path d="M2.5 8.5L6.5 4.5L10.5 8.5" stroke="white" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>
+        </svg>
+      </button>
+      <button id="btnNext" aria-label="Next feature">
+        <svg viewBox="0 0 13 13" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <path d="M2.5 4.5L6.5 8.5L10.5 4.5" stroke="white" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>
+        </svg>
+      </button>
+    </div>
+
+    <!-- Feature list -->
+    <ul class="feature-list" id="featureList">
+      <!-- Items injected by JS -->
+    </ul>
+  </aside>
+
+  <!-- ── Hero ───────────────────────────────────────────────────── -->
+  <div class="hero" id="hero" aria-hidden="true">
+    <!-- Visuals injected by JS -->
+    <!-- Spotlight sweep -->
+    <div class="spotlight" id="spotlight"></div>
+  </div>
+
+</div><!-- /.overlay -->
+
+
+<script>
+/* ══════════════════════════════════════════════════════════════════════
+   PRODUCT FEATURE EXPLORER
+   Matches the Apple-style interactive modal from the reference video.
+   — Left panel: accordion feature list with pill buttons
+   — Expanding card shows description; hero cross-fades to matching visual
+   — GSAP drives every transition: height, opacity, blur, crossfade
+   — Spotlight animates continuously across the hero
+══════════════════════════════════════════════════════════════════════ */
+
+/* ── Data ─────────────────────────────────────────────────────────── */
+const FEATURES = [
+  {
+    id: 'colors',
+    label: 'Colors',
+    title: 'Colors.',
+    body: 'Choose from three bold finishes. iPhone 17 Pro shown in Cosmic Orange.',
+    hasColorPicker: true,
+    colors: [
+      { hex: '#e0dbd4', name: 'Silver' },
+      { hex: '#c8601a', name: 'Cosmic Orange' },
+      { hex: '#4a4f6a', name: 'Desert Titanium' },
+    ],
+   
+    imageSrc: null,
+  },
+  {
+    id: 'aluminum',
+    label: 'Aluminum Unibody',
+    title: 'Aluminum Unibody.',
+    body: 'Optimized for performance and battery. Aluminum alloy is remarkably light and has exceptional thermal conductivity.',
+    imageSrc: null,
+  },
+  {
+    id: 'vapor-chamber',
+    label: 'Vapor Chamber',
+    title: 'Vapor Chamber.',
+    body: 'Deionized water sealed inside moves heat away from the A19 Pro chip, allowing for even higher sustained performance.',
+    imageSrc: null,
+  },
+  {
+    id: 'ceramic-shield',
+    label: 'Ceramic Shield',
+    title: 'Ceramic Shield.',
+    body: 'Protects the back of iPhone 17 Pro, making it 4× more resistant to cracks. New Ceramic Shield 2 on the front has 3× better scratch resistance.',
+    imageSrc: null,
+  },
+  {
+    id: 'display',
+    label: 'Immersive Pro Display',
+    title: 'Immersive Pro Display.',
+    body: 'Our best-ever 6.3-inch and 6.9-inch Super Retina XDR displays. Brighter. Better anti-reflection. ProMotion up to 120Hz.',
+    imageSrc: null,
+  },
+  {
+    id: 'camera',
+    label: 'Camera Control',
+    title: 'Camera Control.',
+    body: 'A dedicated hardware button that lets you launch the camera instantly and control zoom, focus, and shutter — all from one place.',
+    imageSrc: null,
+  },
+  {
+    id: 'action',
+    label: 'Action Button',
+    title: 'Action Button.',
+    body: 'A customizable fast track to your favorite feature. Long press to launch the action you want — Silent mode, Translation, Shortcuts, and more.',
+    imageSrc: null,
+  },
+];
+
+/* ── State ────────────────────────────────────────────────────────── */
+let activeIndex = 0;       // which feature is expanded
+let isAnimating = false;   // guard against overlapping transitions
+
+/* ── DOM References ───────────────────────────────────────────────── */
+const overlay     = document.getElementById('overlay');
+const featureList = document.getElementById('featureList');
+const hero        = document.getElementById('hero');
+const spotlight   = document.getElementById('spotlight');
+const btnPrev     = document.getElementById('btnPrev');
+const btnNext     = document.getElementById('btnNext');
+const btnClose    = document.getElementById('btnClose');
+
+/* ── Build DOM ────────────────────────────────────────────────────── */
+function buildFeatureList() {
+  FEATURES.forEach((feat, idx) => {
+    const li = document.createElement('li');
+    li.className = 'feature-item';
+    li.dataset.idx = idx;
+    li.id = `fi-${feat.id}`;
+
+    /* Pill */
+    const pill = document.createElement('button');
+    pill.className = 'feature-pill';
+    pill.setAttribute('aria-expanded', idx === activeIndex ? 'true' : 'false');
+    pill.setAttribute('aria-controls', `fc-${feat.id}`);
+    pill.innerHTML = `
+      <span class="pill-icon">
+        ${feat.hasColorPicker
+          ? '<span class="icon-circle-swatch"></span>'
+          : '<span class="icon-plus"></span>'}
+      </span>
+      <span class="pill-label">${feat.label}</span>
+    `;
+    pill.addEventListener('click', () => activateFeature(idx));
+
+    /* Card */
+    const card = document.createElement('div');
+    card.className = 'feature-card';
+    card.id = `fc-${feat.id}`;
+    card.setAttribute('role', 'region');
+    card.setAttribute('aria-label', feat.label);
+
+    const bodyHTML = feat.hasColorPicker
+      ? `<p><span class="card-title">${feat.title}</span><span class="card-body"> ${feat.body}</span></p>
+         <div class="color-picker" id="cp-${feat.id}">
+           ${feat.colors.map((c, ci) =>
+             `<button class="color-dot${ci===1?' active':''}"
+               style="background:${c.hex}"
+               aria-label="${c.name}"
+               data-color-idx="${ci}">
+             </button>`
+           ).join('')}
+         </div>`
+      : `<p><span class="card-title">${feat.title}</span><span class="card-body"> ${feat.body}</span></p>`;
+    card.innerHTML = bodyHTML;
+
+    li.appendChild(pill);
+    li.appendChild(card);
+    featureList.appendChild(li);
+  });
+}
+
+function buildHeroVisuals() {
+  FEATURES.forEach((feat, idx) => {
+    const div = document.createElement('div');
+    div.className = `hero-visual${idx === activeIndex ? ' active' : ''}`;
+    div.dataset.feature = feat.id;
+    div.id = `hv-${feat.id}`;
+
+    if (feat.imageSrc) {
+      /* Real image */
+      const img = document.createElement('img');
+      img.src = feat.imageSrc;
+      img.alt = feat.label;
+      img.draggable = false;
+      div.appendChild(img);
+    } else {
+      /* Gradient placeholder with label */
+      const ph = document.createElement('div');
+      ph.className = 'hero-placeholder';
+      ph.textContent = `${feat.label} — add your image here`;
+      div.appendChild(ph);
+    }
+
+    hero.insertBefore(div, spotlight);
+  });
+}
+
+/* ── Initial render heights ───────────────────────────────────────── */
+/*
+  We need each .feature-item's natural height for both states.
+  Strategy:
+  1. Set all cards to visibility:hidden / height auto briefly to measure
+  2. Store the collapsed (pill-only) and expanded (card-only) heights
+  3. Clamp to the correct state
+*/
+const itemMeta = []; // { li, pill, card, pillH, cardH }
+
+function measureItems() {
+  const items = featureList.querySelectorAll('.feature-item');
+
+  items.forEach((li, idx) => {
+    const pill = li.querySelector('.feature-pill');
+    const card = li.querySelector('.feature-card');
+
+    /* Temporarily show both to get natural heights */
+    li.style.overflow = 'visible';
+    pill.style.display = 'flex';
+    card.style.display = 'block';
+    card.style.visibility = 'hidden';
+
+    const pillH = pill.offsetHeight;
+
+    /* Show card temporarily to measure */
+    card.style.visibility = 'visible';
+    const cardH = card.offsetHeight;
+    card.style.visibility = 'hidden';
+    card.style.display = 'none';
+
+    li.style.overflow = '';
+
+    itemMeta.push({ li, pill, card, pillH, cardH });
+  });
+}
+
+function setInitialStates() {
+  itemMeta.forEach(({ li, pill, card, pillH, cardH }, idx) => {
+    if (idx === activeIndex) {
+      /* Expanded */
+      pill.style.display   = 'none';
+      card.style.display   = 'block';
+      card.style.visibility = 'visible';
+      card.style.opacity   = '1';
+      gsap.set(li, { height: cardH });
+    } else {
+      /* Collapsed */
+      pill.style.display   = 'flex';
+      card.style.display   = 'none';
+      card.style.visibility = 'hidden';
+      card.style.opacity   = '0';
+      gsap.set(li, { height: pillH });
+    }
+  });
+}
+
+/* ── Activate a feature ───────────────────────────────────────────── */
+function activateFeature(nextIdx) {
+  if (isAnimating || nextIdx === activeIndex) return;
+  isAnimating = true;
+
+  const prevIdx = activeIndex;
+  activeIndex   = nextIdx;
+
+  const prev     = itemMeta[prevIdx];
+  const next     = itemMeta[nextIdx];
+  const duration = 0.48; // seconds
+  const ease     = 'power3.inOut';
+
+  /* Update aria */
+  featureList.querySelectorAll('.feature-pill').forEach((p, i) => {
+    p.setAttribute('aria-expanded', i === nextIdx ? 'true' : 'false');
+  });
+
+  /* ── Collapse previous ──────────────────────────────────────── */
+  const tl = gsap.timeline({
+    onComplete: () => { isAnimating = false; }
+  });
+
+  /* 1. Fade out previous card */
+  tl.to(prev.card, {
+    opacity: 0,
+    filter: 'blur(4px)',
+    duration: duration * 0.38,
+    ease: 'power2.in',
+    onComplete: () => {
+      prev.card.style.display   = 'none';
+      prev.card.style.visibility = 'hidden';
+      prev.card.style.filter    = '';
+      /* Show pill (hidden until height collapse done) */
+      prev.pill.style.display = 'flex';
+      prev.pill.style.opacity = '0';
+    }
+  });
+
+  /* 2. Shrink previous li to pill height */
+  tl.to(prev.li, {
+    height: prev.pillH,
+    duration: duration * 0.72,
+    ease,
+    onComplete: () => {
+      gsap.to(prev.pill, { opacity: 1, duration: 0.22, ease: 'power2.out' });
+    }
+  }, `-=${duration * 0.3}`);
+
+  /* ── Expand next ──────────────────────────────────────────── */
+
+  /* 3. Hide next pill, prepare card */
+  tl.add(() => {
+    next.pill.style.display   = 'none';
+    next.card.style.display   = 'block';
+    next.card.style.visibility = 'visible';
+    next.card.style.opacity   = '0';
+    next.card.style.filter    = 'blur(6px)';
+  }, `-=${duration * 0.55}`);
+
+  /* 4. Grow next li to card height */
+  tl.to(next.li, {
+    height: next.cardH,
+    duration: duration * 0.72,
+    ease,
+  }, `-=${duration * 0.55}`);
+
+  /* 5. Fade in next card */
+  tl.to(next.card, {
+    opacity: 1,
+    filter: 'blur(0px)',
+    duration: duration * 0.45,
+    ease: 'power2.out',
+  }, `-=${duration * 0.35}`);
+
+  /* ── Hero crossfade ───────────────────────────────────────── */
+  const prevVisual = document.getElementById(`hv-${FEATURES[prevIdx].id}`);
+  const nextVisual = document.getElementById(`hv-${FEATURES[nextIdx].id}`);
+
+  /* Fade in next visual first (slightly overlapping) */
+  gsap.set(nextVisual, { opacity: 0, scale: 1.03 });
+  gsap.to(nextVisual, {
+    opacity: 1,
+    scale: 1,
+    duration: 0.75,
+    ease: 'power2.inOut',
+    delay: 0.06,
+  });
+  /* Then fade out old */
+  gsap.to(prevVisual, {
+    opacity: 0,
+    scale: 0.98,
+    duration: 0.55,
+    ease: 'power2.in',
+    delay: 0.20,
+    onComplete: () => {
+      prevVisual.classList.remove('active');
+      nextVisual.classList.add('active');
+      gsap.set(prevVisual, { scale: 1 });
+    }
+  });
+}
+
+/* ── Nav buttons ──────────────────────────────────────────────────── */
+btnPrev.addEventListener('click', () => {
+  const prev = (activeIndex - 1 + FEATURES.length) % FEATURES.length;
+  activateFeature(prev);
+});
+btnNext.addEventListener('click', () => {
+  const next = (activeIndex + 1) % FEATURES.length;
+  activateFeature(next);
+});
+
+/* ── Keyboard navigation ──────────────────────────────────────────── */
+document.addEventListener('keydown', (e) => {
+  if (e.key === 'ArrowUp')   { e.preventDefault(); btnPrev.click(); }
+  if (e.key === 'ArrowDown') { e.preventDefault(); btnNext.click(); }
+  if (e.key === 'Escape')    { btnClose.click(); }
+});
+
+/* ── Close ────────────────────────────────────────────────────────── */
+btnClose.addEventListener('click', () => {
+  gsap.to(overlay, {
+    opacity: 0, duration: 0.38, ease: 'power2.in',
+    onComplete: () => { /* In a real app: overlay.remove() or hide */ }
+  });
+});
+
+/* ── Spotlight sweep animation ────────────────────────────────────── */
+function animateSpotlight() {
+  /*
+    Moves a wide, soft diagonal gradient from left to right across the hero.
+    Very subtle — simulates a moving light reflection on the product surface.
+  */
+  const tl = gsap.timeline({ repeat: -1, repeatDelay: 3.5 });
+
+  tl.fromTo(spotlight,
+    { backgroundPosition: '-100% 0' },
+    {
+      backgroundPosition: '250% 0',
+      duration: 3.2,
+      ease: 'power1.inOut',
+    }
+  );
+
+  /* Re-set background to sweepable version */
+  spotlight.style.backgroundSize = '300% 100%';
+  spotlight.style.background = `linear-gradient(
+    115deg,
+    transparent 0%,
+    transparent 30%,
+    rgba(255,255,255,0.032) 45%,
+    rgba(255,255,255,0.018) 50%,
+    rgba(255,255,255,0.032) 55%,
+    transparent 70%,
+    transparent 100%
+  )`;
+}
+
+/* ── Idle float on feature-items ──────────────────────────────────── */
+/*
+  Very gentle vertical drift on each pill/card to keep the panel alive.
+  Each item gets a slightly different phase so they don't all move in sync.
+*/
+function animateIdleFloat() {
+  itemMeta.forEach(({ li }, idx) => {
+    const phase  = idx * 0.6;          // offset phase per item
+    const amp    = 1.5 + idx * 0.3;   // subtle amplitude
+    const period = 4 + idx * 0.4;     // slightly different period
+
+    gsap.to(li, {
+      y: amp,
+      duration: period / 2,
+      ease: 'sine.inOut',
+      repeat: -1,
+      yoyo: true,
+      delay: phase,
+    });
+  });
+}
+
+/* ── Entry animation ──────────────────────────────────────────────── */
+function playEntrance() {
+  const tl = gsap.timeline();
+
+  /* Overlay fade in */
+  tl.to(overlay, { opacity: 1, duration: 0.65, ease: 'power2.out' });
+
+  /* Panel items stagger in */
+  tl.from(itemMeta.map(m => m.li), {
+    x: -18,
+    opacity: 0,
+    duration: 0.55,
+    ease: 'power3.out',
+    stagger: 0.06,
+    clearProps: 'x,opacity',
+  }, '-=0.30');
+
+  /* Nav arrows */
+  tl.from([btnPrev, btnNext], {
+    opacity: 0,
+    x: -8,
+    duration: 0.4,
+    ease: 'power2.out',
+    stagger: 0.08,
+    clearProps: 'all',
+  }, '-=0.45');
+
+  /* Hero fade in */
+  tl.from('#hero', {
+    opacity: 0,
+    duration: 0.9,
+    ease: 'power2.out',
+  }, '-=0.65');
+
+  /* Close button */
+  tl.from(btnClose, {
+    opacity: 0,
+    duration: 0.3,
+    ease: 'power2.out',
+    clearProps: 'all',
+  }, '-=0.5');
+}
+
+/* ── Init ─────────────────────────────────────────────────────────── */
+function init() {
+  buildFeatureList();
+  buildHeroVisuals();
+  measureItems();
+  setInitialStates();
+  playEntrance();
+  animateSpotlight();
+  animateIdleFloat();
+
+  /* Set first hero visual visible */
+  gsap.set(document.getElementById(`hv-${FEATURES[0].id}`), { opacity: 1 });
+}
+
+/* Run after DOM is fully rendered */
+requestAnimationFrame(() => requestAnimationFrame(init));
+</script>
+</body>
+</html>
